@@ -1,0 +1,42 @@
+{
+  "name": "@farhanmansuri/ignite-firebase",
+  "version": "1.0.1",
+  "main": "./dist/index.js",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.mts",
+        "default": "./dist/index.mjs"
+      },
+      "require": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      }
+    }
+  },
+  "scripts": {
+    "build": "tsup src/index.ts --format cjs,esm --dts"
+  },
+  "peerDependencies": {
+    "firebase-functions": ">=4.0.0",
+    "express": ">=4.0.0"
+  },
+  "keywords": [
+    "firebase",
+    "firebase-functions",
+    "serverless",
+    "cold-start",
+    "pre-warming",
+    "middleware",
+    "cloud-functions",
+    "performance",
+    "optimization"
+  ],
+  "devDependencies": {
+    "firebase-functions": "^4.0.0",
+    "tsup": "^8.0.0",
+    "typescript": "^5.0.0"
+  }
+}
