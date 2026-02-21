@@ -1,5 +1,9 @@
 # Ignite
 
+[![npm version](https://img.shields.io/npm/v/@farhanmansuri/ignite-core.svg)](https://www.npmjs.com/package/@farhanmansuri/ignite-core)
+[![CI](https://github.com/farhanmansurii/ignite/actions/workflows/ci.yml/badge.svg)](https://github.com/farhanmansurii/ignite/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
+
 **Eliminate serverless cold starts by bridging user hover intent with infrastructure pre-warming.**
 
 Ignite detects when a user hovers over a button (150ms intent threshold), fires a non-blocking signal to a Rust edge proxy, which wakes up the target Cloud Function before the user even clicks.
@@ -16,8 +20,10 @@ User Hover → @farhanmansuri/ignite-react → @farhanmansuri/ignite-core (sendB
 
 | Package | Description |
 |---|---|
-| `@farhanmansuri/ignite-core` | Framework-agnostic signal logic. `sendBeacon` primary, `fetch` fallback. Module-level warm cache. |
+| `@farhanmansuri/ignite-core` | Framework-agnostic signal logic. `sendBeacon` primary, `fetch` fallback. TTL warm cache. |
 | `@farhanmansuri/ignite-react` | React hook with stable `useRef` callbacks, hover/focus/touch support. |
+| `@farhanmansuri/ignite-vue` | Vue 3 composable with `onUnmounted` cleanup. |
+| `@farhanmansuri/ignite-svelte` | Svelte `use:ignite` action with full lifecycle cleanup. |
 | `@farhanmansuri/ignite-proxy` | Rust/Wasm Cloudflare Worker. Shared-secret auth, exact-match function allowlist, `ctx.wait_until` for zero-latency response. |
 | `@farhanmansuri/ignite-firebase` | Type-safe early-exit middleware for `onCall` and `onRequest` triggers. |
 
@@ -59,7 +65,7 @@ export const processPayment = igniteMiddleware(async (req, res) => {
 }, process.env.IGNITE_SECRET);
 ```
 
-### 3. Add to your React component
+### 3. React
 
 ```tsx
 import { useIgnite } from '@farhanmansuri/ignite-react';
@@ -72,6 +78,43 @@ const ignite = useIgnite('createProject', {
 });
 
 <button {...ignite} onClick={handleSubmit}>
+  Create Project
+</button>
+```
+
+### 4. Vue 3
+
+```vue
+<template>
+  <button
+    v-on="{ mouseenter: onMouseEnter, mouseleave: onMouseLeave }"
+    @click="handleSubmit"
+  >
+    Create Project
+  </button>
+</template>
+
+<script setup lang="ts">
+import { useIgnite } from '@farhanmansuri/ignite-vue';
+
+const { onMouseEnter, onMouseLeave } = useIgnite('createProject', {
+  proxyUrl: 'https://your-proxy.workers.dev',
+  onWarm: (fn, ms) => console.log(`${fn} warmed in ${ms}ms`),
+});
+</script>
+```
+
+### 5. Svelte
+
+```svelte
+<script>
+  import { ignite } from '@farhanmansuri/ignite-svelte';
+</script>
+
+<button
+  use:ignite={{ functionName: 'createProject', proxyUrl: 'https://your-proxy.workers.dev' }}
+  on:click={handleSubmit}
+>
   Create Project
 </button>
 ```
@@ -93,4 +136,5 @@ const ignite = useIgnite('createProject', {
 ```bash
 pnpm install
 pnpm build        # builds all packages
+pnpm test         # runs all test suites
 ```

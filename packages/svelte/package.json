@@ -1,7 +1,7 @@
 {
-  "name": "@farhanmansuri/ignite-react",
+  "name": "@farhanmansuri/ignite-svelte",
   "version": "1.0.3",
-  "description": "React hook for Ignite — pre-warms serverless functions on hover intent",
+  "description": "Svelte action for Ignite — pre-warms serverless functions on hover intent",
   "license": "MIT",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
@@ -21,39 +21,34 @@
   "repository": {
     "type": "git",
     "url": "https://github.com/farhanmansurii/ignite.git",
-    "directory": "packages/react"
+    "directory": "packages/svelte"
   },
-  "homepage": "https://github.com/farhanmansurii/ignite/tree/master/packages/react#readme",
+  "homepage": "https://github.com/farhanmansurii/ignite/tree/master/packages/svelte#readme",
   "bugs": {
     "url": "https://github.com/farhanmansurii/ignite/issues"
   },
   "scripts": {
     "build": "tsup src/index.ts --format cjs,esm --dts",
-    "test": "vitest run"
+    "test": "vitest run --passWithNoTests"
   },
   "peerDependencies": {
-    "react": ">=16"
+    "svelte": ">=3"
   },
   "dependencies": {
     "@farhanmansuri/ignite-core": "workspace:*"
   },
   "keywords": [
-    "react",
-    "hook",
+    "svelte",
+    "svelte-action",
     "serverless",
     "cold-start",
     "pre-warming",
     "performance",
     "hover-intent",
-    "firebase",
-    "prefetch",
     "optimization"
   ],
   "devDependencies": {
-    "@testing-library/react": "^14.0.0",
-    "@types/react": "^18.0.0",
-    "happy-dom": "^14.0.0",
-    "react": "^18.0.0",
+    "svelte": "^4.0.0",
     "tsup": "^8.0.0",
     "typescript": "^5.0.0",
     "vitest": "^1.0.0"

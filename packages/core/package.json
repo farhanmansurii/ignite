@@ -1,6 +1,8 @@
 {
   "name": "@farhanmansuri/ignite-core",
   "version": "1.0.3",
+  "description": "Serverless cold-start elimination — framework-agnostic signal logic",
+  "license": "MIT",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
   "types": "./dist/index.d.ts",
@@ -26,7 +28,8 @@
     "url": "https://github.com/farhanmansurii/ignite/issues"
   },
   "scripts": {
-    "build": "tsup src/index.ts --format cjs,esm --dts"
+    "build": "tsup src/index.ts --format cjs,esm --dts",
+    "test": "vitest run"
   },
   "keywords": [
     "serverless",
@@ -40,7 +43,9 @@
     "optimization"
   ],
   "devDependencies": {
+    "happy-dom": "^14.0.0",
     "tsup": "^8.0.0",
-    "typescript": "^5.0.0"
+    "typescript": "^5.0.0",
+    "vitest": "^1.0.0"
   }
 }
