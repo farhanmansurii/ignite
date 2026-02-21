@@ -46,31 +46,31 @@ jobs:
         run: pnpm --filter "!@farhanmansuri/ignite-proxy" -r build
 
       - name: Publish @farhanmansuri/ignite-core
-        run: pnpm publish --provenance --access public
+        run: pnpm publish --provenance --access public --no-git-checks
         working-directory: packages/core
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Publish @farhanmansuri/ignite-react
-        run: pnpm publish --provenance --access public
+        run: pnpm publish --provenance --access public --no-git-checks
         working-directory: packages/react
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Publish @farhanmansuri/ignite-firebase
-        run: pnpm publish --provenance --access public
+        run: pnpm publish --provenance --access public --no-git-checks
         working-directory: packages/firebase
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Publish @farhanmansuri/ignite-vue
-        run: pnpm publish --provenance --access public
+        run: pnpm publish --provenance --access public --no-git-checks
         working-directory: packages/vue
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Publish @farhanmansuri/ignite-svelte
-        run: pnpm publish --provenance --access public
+        run: pnpm publish --provenance --access public --no-git-checks
         working-directory: packages/svelte
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
