@@ -1,6 +1,6 @@
 {
   "name": "@farhanmansuri/ignite-vue",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "Vue 3 composable for Ignite — pre-warms serverless functions on hover intent",
   "license": "MIT",
   "main": "./dist/index.js",

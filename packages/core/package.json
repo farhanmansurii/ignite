@@ -1,6 +1,6 @@
 {
   "name": "@farhanmansuri/ignite-core",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "Serverless cold-start elimination — framework-agnostic signal logic",
   "license": "MIT",
   "main": "./dist/index.js",
