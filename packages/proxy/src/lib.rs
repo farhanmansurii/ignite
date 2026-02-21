@@ -37,112 +37,112 @@ pub fn build_target_url(base_url: &str, function_name: &str) -> String {
 }
 
 // ─── Worker handler ────────────────────────────────────────────────────────
-
 #[event(fetch)]
 pub async fn main(req: Request, env: Env, ctx: worker::Context) -> Result<Response> {
-    let router = Router::new();
+    let path = req.path();
 
-    router
-        .options("/warm", |_req, _ctx| {
+    match (req.method(), path.as_str()) {
+        (Method::Options, "/warm") => {
             let mut headers = Headers::new();
             headers.set("Access-Control-Allow-Origin", "*")?;
             headers.set("Access-Control-Allow-Methods", "POST, OPTIONS")?;
             headers.set("Access-Control-Allow-Headers", "Content-Type, X-Ignite-Key")?;
             Ok(Response::empty()?.with_headers(headers))
-        })
-        .post_async("/warm", |req, ctx| async move {
-            let url = req.url()?;
-            let query: std::collections::HashMap<_, _> =
-                url.query_pairs().into_owned().collect();
+        }
+        (Method::Post, "/warm") => handle_warm(req, env, ctx).await,
+        _ => Response::error("Not Found", 404),
+    }
+}
 
-            // 1. Auth check
-            let auth_key = req.headers().get("X-Ignite-Key")?.unwrap_or_default();
-            let secret = ctx.env.var("IGNITE_SECRET")?.to_string();
-            if !verify_auth(&auth_key, &secret) {
-                return Response::error("Unauthorized", 401);
-            }
+async fn handle_warm(req: Request, env: Env, _ctx: worker::Context) -> Result<Response> {
+    let url = req.url()?;
+    let query: std::collections::HashMap<_, _> =
+        url.query_pairs().into_owned().collect();
 
-            // 2. Function name check
-            let function_name = match query.get("fn") {
-                Some(name) => name.clone(),
-                None => return Response::error("Missing function parameter", 400),
-            };
+    // 1. Auth check
+    let auth_key = req.headers().get("X-Ignite-Key")?.unwrap_or_default();
+    let secret = env.var("IGNITE_SECRET")?.to_string();
+    if !verify_auth(&auth_key, &secret) {
+        return Response::error("Unauthorized", 401);
+    }
 
-            // 3. Allowlist check
-            let allowed = ctx.env.var("ALLOWED_FUNCTIONS")?.to_string();
-            if !verify_allowlist(&function_name, &allowed) {
-                return Response::error("Forbidden", 403);
-            }
+    // 2. Function name check
+    let function_name = match query.get("fn") {
+        Some(name) => name.clone(),
+        None => return Response::error("Missing function parameter", 400),
+    };
 
-            // 4. Rate limiting — 30 requests per IP per 60s window via KV
-            if let Ok(kv) = ctx.env.kv("RATE_LIMIT_KV") {
-                let ip = req
-                    .headers()
-                    .get("CF-Connecting-IP")?
-                    .unwrap_or_else(|| "unknown".to_string());
+    // 3. Allowlist check
+    let allowed = env.var("ALLOWED_FUNCTIONS")?.to_string();
+    if !verify_allowlist(&function_name, &allowed) {
+        return Response::error("Forbidden", 403);
+    }
 
-                // Use seconds since epoch as the time bucket
-                let now_secs = js_sys::Date::now() as u64 / 1000;
-                let key = rate_limit_key(&ip, now_secs);
+    // 4. Rate limiting — 30 requests per IP per 60s window via KV
+    if let Ok(kv) = env.kv("RATE_LIMIT_KV") {
+        let ip = req
+            .headers()
+            .get("CF-Connecting-IP")?
+            .unwrap_or_else(|| "unknown".to_string());
 
-                let count: u32 = kv
-                    .get(&key)
-                    .text()
-                    .await?
-                    .and_then(|s| s.parse().ok())
-                    .unwrap_or(0);
+        let now_secs = js_sys::Date::now() as u64 / 1000;
+        let key = rate_limit_key(&ip, now_secs);
 
-                if count >= RATE_LIMIT_MAX {
-                    let mut resp = Response::error("Too Many Requests", 429)?;
-                    resp.headers_mut()
-                        .set("Retry-After", &RATE_LIMIT_WINDOW_SECS.to_string())?;
-                    resp.headers_mut()
-                        .set("Access-Control-Allow-Origin", "*")?;
-                    return Ok(resp);
-                }
+        let count: u32 = kv
+            .get(&key)
+            .text()
+            .await?
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(0);
 
-                // Increment counter; expire after 2 windows to avoid stale keys
-                let _ = kv
-                    .put(&key, (count + 1).to_string())?
-                    .expiration_ttl(RATE_LIMIT_WINDOW_SECS * 2)
-                    .execute()
-                    .await;
-            }
-
-            // 5. Immediate response + background warm via ctx.wait_until
-            let target_url = build_target_url(
-                &ctx.env.var("FIREBASE_BASE_URL")?.to_string(),
-                &function_name,
-            );
-
-            ctx.wait_until(async move {
-                let mut headers = Headers::new();
-                let _ = headers.set("Content-Type", "application/json");
-                let _ = headers.set("X-Ignite-Warm", "true");
-                let _ = headers.set("X-Ignite-Key", &secret);
-
-                if let Ok(request) = Request::new_with_init(
-                    &target_url,
-                    RequestInit::new()
-                        .with_method(Method::Post)
-                        .with_headers(headers)
-                        .with_body(Some(
-                            serde_json::to_string(&IgnitePayload { ignite: true })
-                                .unwrap()
-                                .into(),
-                        )),
-                ) {
-                    let _ = Fetch::Request(request).send().await;
-                }
-            });
-
-            let mut resp = Response::ok("Ignited")?;
+        if count >= RATE_LIMIT_MAX {
+            let mut resp = Response::error("Too Many Requests", 429)?;
+            resp.headers_mut()
+                .set("Retry-After", &RATE_LIMIT_WINDOW_SECS.to_string())?;
             resp.headers_mut()
                 .set("Access-Control-Allow-Origin", "*")?;
-            Ok(resp)
-        })
-        .run(req, env)
-        .await
+            return Ok(resp);
+        }
+
+        // Increment counter; expire after 2 windows to avoid stale keys
+        let _ = kv
+            .put(&key, (count + 1).to_string())?
+            .expiration_ttl(RATE_LIMIT_WINDOW_SECS * 2)
+            .execute()
+            .await;
+    }
+
+    // 5. Return 200 immediately; warm Firebase in the background
+    let target_url = build_target_url(
+        &env.var("FIREBASE_BASE_URL")?.to_string(),
+        &function_name,
+    );
+
+    wasm_bindgen_futures::spawn_local(async move {
+        let mut headers = Headers::new();
+        let _ = headers.set("Content-Type", "application/json");
+        let _ = headers.set("X-Ignite-Warm", "true");
+        let _ = headers.set("X-Ignite-Key", &secret);
+
+        if let Ok(request) = Request::new_with_init(
+            &target_url,
+            RequestInit::new()
+                .with_method(Method::Post)
+                .with_headers(headers)
+                .with_body(Some(
+                    serde_json::to_string(&IgnitePayload { ignite: true })
+                        .unwrap()
+                        .into(),
+                )),
+        ) {
+            let _ = Fetch::Request(request).send().await;
+        }
+    });
+
+    let mut resp = Response::ok("Ignited")?;
+    resp.headers_mut()
+        .set("Access-Control-Allow-Origin", "*")?;
+    Ok(resp)
 }
 
 // ─── Unit tests ────────────────────────────────────────────────────────────
