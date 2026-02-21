@@ -81,6 +81,9 @@ importers:
         specifier: workspace:*
         version: link:../core
     devDependencies:
+      happy-dom:
+        specifier: ^14.0.0
+        version: 14.12.3
       svelte:
         specifier: ^4.0.0
         version: 4.2.20

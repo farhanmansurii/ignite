@@ -1,7 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { sendIgniteSignal, sendIgniteSignals, clearWarmCache, isWarmed } from './index';
 
-// Mock navigator.sendBeacon
 const mockSendBeacon = vi.fn(() => true);
 
 beforeEach(() => {
@@ -26,23 +25,25 @@ describe('sendIgniteSignal', () => {
     );
   });
 
+  it('URL-encodes the functionName', async () => {
+    await sendIgniteSignal('my fn/test', { proxyUrl: 'https://example.com' });
+    expect(mockSendBeacon).toHaveBeenCalledWith(
+      'https://example.com/warm?fn=my%20fn%2Ftest',
+      expect.any(Blob)
+    );
+  });
+
   it('skips sendBeacon if already warmed within TTL', async () => {
     await sendIgniteSignal('myFn', { proxyUrl: 'https://example.com' });
-    expect(mockSendBeacon).toHaveBeenCalledTimes(1);
-
     await sendIgniteSignal('myFn', { proxyUrl: 'https://example.com' });
-    expect(mockSendBeacon).toHaveBeenCalledTimes(1); // still 1 — skipped
+    expect(mockSendBeacon).toHaveBeenCalledTimes(1);
   });
 
   it('re-fires after TTL expires', async () => {
     vi.useFakeTimers();
-
     await sendIgniteSignal('myFn', { proxyUrl: 'https://example.com' });
     expect(mockSendBeacon).toHaveBeenCalledTimes(1);
-
-    // Advance past 5-minute TTL
     vi.advanceTimersByTime(5 * 60 * 1000 + 1);
-
     await sendIgniteSignal('myFn', { proxyUrl: 'https://example.com' });
     expect(mockSendBeacon).toHaveBeenCalledTimes(2);
   });
@@ -50,27 +51,67 @@ describe('sendIgniteSignal', () => {
   it('calls onError when proxyUrl is missing', async () => {
     const onError = vi.fn();
     await sendIgniteSignal('myFn', { proxyUrl: '', onError });
-    expect(onError).toHaveBeenCalledWith(expect.any(Error));
-    expect(onError.mock.calls[0][0].message).toBe('proxyUrl is required');
+    expect(onError).toHaveBeenCalledWith(expect.objectContaining({ message: 'proxyUrl is required' }));
     expect(mockSendBeacon).not.toHaveBeenCalled();
   });
 
   it('calls onError when functionName is empty', async () => {
     const onError = vi.fn();
     await sendIgniteSignal('', { proxyUrl: 'https://example.com', onError });
-    expect(onError).toHaveBeenCalledWith(expect.any(Error));
-    expect(onError.mock.calls[0][0].message).toBe('functionName is required');
+    expect(onError).toHaveBeenCalledWith(expect.objectContaining({ message: 'functionName is required' }));
     expect(mockSendBeacon).not.toHaveBeenCalled();
   });
+
+  it('falls back to fetch when sendBeacon returns false', async () => {
+    mockSendBeacon.mockReturnValue(false);
+    const fetchSpy = vi.fn().mockResolvedValue(new Response());
+    vi.stubGlobal('fetch', fetchSpy);
+
+    await sendIgniteSignal('myFn', { proxyUrl: 'https://example.com' });
+
+    expect(fetchSpy).toHaveBeenCalledOnce();
+    expect(fetchSpy).toHaveBeenCalledWith(
+      'https://example.com/warm?fn=myFn',
+      expect.objectContaining({ method: 'POST' })
+    );
+  });
+
+  it('fetch fallback includes X-Ignite-Key header when apiKey provided', async () => {
+    mockSendBeacon.mockReturnValue(false);
+    const fetchSpy = vi.fn().mockResolvedValue(new Response());
+    vi.stubGlobal('fetch', fetchSpy);
+
+    await sendIgniteSignal('myFn', { proxyUrl: 'https://example.com', apiKey: 'secret123' });
+
+    const [, init] = fetchSpy.mock.calls[0];
+    expect(init.headers['X-Ignite-Key']).toBe('secret123');
+  });
+
+  it('calls onError when fetch times out', async () => {
+    mockSendBeacon.mockReturnValue(false);
+    const onError = vi.fn();
+    // Simulate a fetch that respects the AbortSignal
+    vi.stubGlobal('fetch', (_url: string, init?: RequestInit) =>
+      new Promise((_, reject) => {
+        init?.signal?.addEventListener('abort', () =>
+          reject(new DOMException('The operation was aborted.', 'AbortError'))
+        );
+      })
+    );
+    vi.useFakeTimers();
+
+    const promise = sendIgniteSignal('myFn', { proxyUrl: 'https://example.com', onError });
+    vi.advanceTimersByTime(5001);
+    await promise;
+
+    expect(onError).toHaveBeenCalled();
+  }, 10000);
 });
 
 describe('clearWarmCache', () => {
   it('resets warm state so next call fires again', async () => {
     await sendIgniteSignal('myFn', { proxyUrl: 'https://example.com' });
-    expect(mockSendBeacon).toHaveBeenCalledTimes(1);
-
     clearWarmCache();
-
     await sendIgniteSignal('myFn', { proxyUrl: 'https://example.com' });
     expect(mockSendBeacon).toHaveBeenCalledTimes(2);
   });
@@ -84,10 +125,7 @@ describe('sendIgniteSignals (batch)', () => {
 
   it('skips already-warmed functions in batch', async () => {
     await sendIgniteSignal('fn1', { proxyUrl: 'https://example.com' });
-    expect(mockSendBeacon).toHaveBeenCalledTimes(1);
-
     await sendIgniteSignals(['fn1', 'fn2'], { proxyUrl: 'https://example.com' });
-    // fn1 is already warmed, only fn2 fires
     expect(mockSendBeacon).toHaveBeenCalledTimes(2);
   });
 });
@@ -105,8 +143,6 @@ describe('isWarmed', () => {
   it('returns false after TTL expires', async () => {
     vi.useFakeTimers();
     await sendIgniteSignal('fn1', { proxyUrl: 'https://example.com' });
-    expect(isWarmed('fn1')).toBe(true);
-
     vi.advanceTimersByTime(5 * 60 * 1000 + 1);
     expect(isWarmed('fn1')).toBe(false);
   });

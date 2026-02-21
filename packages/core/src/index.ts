@@ -7,6 +7,7 @@ export interface IgniteOptions {
 }
 
 const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+const FETCH_TIMEOUT_MS = 5_000;       // 5 second abort timeout
 
 // Map from fnName → timestamp of when it was warmed
 const warmedFunctions = new Map<string, number>();
@@ -45,29 +46,42 @@ export const sendIgniteSignal = async (
   if (isWarmed(functionName)) return;
 
   const start = Date.now();
-  const url = `${options.proxyUrl}/warm?fn=${functionName}`;
+  // URL-encode functionName to prevent injection via query string
+  const url = `${options.proxyUrl}/warm?fn=${encodeURIComponent(functionName)}`;
+  const body = JSON.stringify({ __ignite: true });
 
   try {
+    // sendBeacon: non-blocking, survives page unload — preferred path
     if (typeof navigator !== 'undefined' && navigator.sendBeacon) {
-      const blob = new Blob([JSON.stringify({ __ignite: true })], { type: 'application/json' });
+      const blob = new Blob([body], { type: 'application/json' });
       const success = navigator.sendBeacon(url, blob);
       if (success) {
         warmedFunctions.set(functionName, Date.now());
-        // Note: For beacons, latency reflects transmission queuing, not execution.
         options.onWarm?.(functionName, Date.now() - start);
         return;
       }
     }
 
-    await fetch(url, {
-      method: 'POST',
-      mode: 'cors',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(options.apiKey && { 'X-Ignite-Key': options.apiKey }),
-      },
-      body: JSON.stringify({ __ignite: true }),
-    });
+    // fetch fallback with AbortController timeout
+    const controller = new AbortController();
+    const timer = typeof setTimeout !== 'undefined'
+      ? setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS)
+      : null;
+
+    try {
+      await fetch(url, {
+        method: 'POST',
+        mode: 'cors',
+        signal: controller.signal,
+        headers: {
+          'Content-Type': 'application/json',
+          ...(options.apiKey && { 'X-Ignite-Key': options.apiKey }),
+        },
+        body,
+      });
+    } finally {
+      if (timer !== null) clearTimeout(timer);
+    }
 
     warmedFunctions.set(functionName, Date.now());
     options.onWarm?.(functionName, Date.now() - start);

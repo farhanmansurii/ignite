@@ -30,35 +30,47 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Verify package versions match git tag
+        run: |
+          TAG="${GITHUB_REF_NAME#v}"
+          for pkg in packages/core packages/react packages/firebase packages/vue packages/svelte; do
+            PKG_VERSION=$(node -p "require('./$pkg/package.json').version")
+            if [ "$PKG_VERSION" != "$TAG" ]; then
+              echo "Version mismatch in $pkg: package.json=$PKG_VERSION, tag=$TAG"
+              exit 1
+            fi
+          done
+          echo "All versions match tag $TAG"
+
       - name: Build all packages
         run: pnpm --filter "!@farhanmansuri/ignite-proxy" -r build
 
       - name: Publish @farhanmansuri/ignite-core
-        run: pnpm publish --provenance --access public --no-git-checks
+        run: pnpm publish --provenance --access public
         working-directory: packages/core
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Publish @farhanmansuri/ignite-react
-        run: pnpm publish --provenance --access public --no-git-checks
+        run: pnpm publish --provenance --access public
         working-directory: packages/react
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Publish @farhanmansuri/ignite-firebase
-        run: pnpm publish --provenance --access public --no-git-checks
+        run: pnpm publish --provenance --access public
         working-directory: packages/firebase
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Publish @farhanmansuri/ignite-vue
-        run: pnpm publish --provenance --access public --no-git-checks
+        run: pnpm publish --provenance --access public
         working-directory: packages/vue
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Publish @farhanmansuri/ignite-svelte
-        run: pnpm publish --provenance --access public --no-git-checks
+        run: pnpm publish --provenance --access public
         working-directory: packages/svelte
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

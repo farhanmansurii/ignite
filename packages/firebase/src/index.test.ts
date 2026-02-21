@@ -1,31 +1,51 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { igniteMiddleware } from './index';
+import { describe, it, expect, vi } from 'vitest';
 
-// Mock firebase-functions so we can test the logic without the full SDK
 vi.mock('firebase-functions/v2/https', () => ({
   onCall: (fn: Function) => fn,
 }));
 
-// Re-import after mock
-const { igniteWrapper } = await import('./index');
+const { igniteWrapper, igniteMiddleware } = await import('./index');
 
 const SECRET = 'test-secret';
 
 // ─── igniteWrapper tests ───────────────────────────────────────────────────
 
 describe('igniteWrapper', () => {
-  it('returns { status: "ignited" } on warm signal with correct secret', async () => {
+  it('returns { status: "ignited" } on warm signal with correct secret (data)', async () => {
     const handler = vi.fn();
     const wrapped = igniteWrapper(handler, SECRET);
 
-    const fakeRequest = {
+    const result = await wrapped({
       data: { __ignite: true },
-      rawRequest: {
-        headers: { 'x-ignite-key': SECRET, 'x-ignite-warm': 'false' },
-      },
-    };
+      rawRequest: { headers: { 'x-ignite-key': SECRET } },
+    } as any);
 
-    const result = await wrapped(fakeRequest as any);
+    expect(result).toEqual({ status: 'ignited' });
+    expect(handler).not.toHaveBeenCalled();
+  });
+
+  it('returns { status: "ignited" } on warm signal via x-ignite-warm header', async () => {
+    const handler = vi.fn();
+    const wrapped = igniteWrapper(handler, SECRET);
+
+    const result = await wrapped({
+      data: {},
+      rawRequest: { headers: { 'x-ignite-warm': 'true', 'x-ignite-key': SECRET } },
+    } as any);
+
+    expect(result).toEqual({ status: 'ignited' });
+    expect(handler).not.toHaveBeenCalled();
+  });
+
+  it('handles uppercase X-Ignite-Warm header (case-insensitive fix)', async () => {
+    const handler = vi.fn();
+    const wrapped = igniteWrapper(handler, SECRET);
+
+    const result = await wrapped({
+      data: {},
+      rawRequest: { headers: { 'X-Ignite-Warm': 'true', 'X-Ignite-Key': SECRET } },
+    } as any);
+
     expect(result).toEqual({ status: 'ignited' });
     expect(handler).not.toHaveBeenCalled();
   });
@@ -34,45 +54,40 @@ describe('igniteWrapper', () => {
     const handler = vi.fn().mockResolvedValue({ data: 'hello' });
     const wrapped = igniteWrapper(handler, SECRET);
 
-    const fakeRequest = {
+    const result = await wrapped({
       data: {},
-      rawRequest: {
-        headers: { 'x-ignite-key': SECRET },
-      },
-    };
+      rawRequest: { headers: { 'x-ignite-key': SECRET } },
+    } as any);
 
-    const result = await wrapped(fakeRequest as any);
     expect(handler).toHaveBeenCalledOnce();
     expect(result).toEqual({ data: 'hello' });
   });
 
-  it('rejects warm signal with wrong secret — falls through to handler', async () => {
+  it('calls handler when secret is wrong', async () => {
     const handler = vi.fn().mockResolvedValue({ data: 'real' });
     const wrapped = igniteWrapper(handler, SECRET);
 
-    const fakeRequest = {
+    await wrapped({
       data: { __ignite: true },
-      rawRequest: {
-        headers: { 'x-ignite-key': 'wrong-secret' },
-      },
-    };
+      rawRequest: { headers: { 'x-ignite-key': 'wrong-secret' } },
+    } as any);
 
-    await wrapped(fakeRequest as any);
-    // Wrong secret → handler is called instead of early-exit
+    expect(handler).toHaveBeenCalledOnce();
+  });
+
+  it('handles missing rawRequest gracefully', async () => {
+    const handler = vi.fn().mockResolvedValue({ data: 'ok' });
+    const wrapped = igniteWrapper(handler, SECRET);
+
+    await wrapped({ data: {}, rawRequest: undefined } as any);
     expect(handler).toHaveBeenCalledOnce();
   });
 });
 
 // ─── igniteMiddleware tests ────────────────────────────────────────────────
 
-const makeRes = () => {
-  const res = { json: vi.fn() } as any;
-  return res;
-};
-
-const makeReq = (headers: Record<string, string> = {}, body: any = {}) => {
-  return { headers, body } as any;
-};
+const makeRes = () => ({ json: vi.fn() } as any);
+const makeReq = (headers: Record<string, string> = {}) => ({ headers } as any);
 
 describe('igniteMiddleware', () => {
   it('returns { status: "ignited" } on warm signal with correct secret', async () => {
@@ -88,20 +103,29 @@ describe('igniteMiddleware', () => {
     expect(handler).not.toHaveBeenCalled();
   });
 
-  it('calls handler on real request', async () => {
+  it('handles uppercase headers (case-insensitive fix)', async () => {
     const handler = vi.fn();
     const wrapped = igniteMiddleware(handler, SECRET);
 
-    const req = makeReq({ 'x-ignite-key': SECRET });
+    const req = makeReq({ 'X-Ignite-Warm': 'true', 'X-Ignite-Key': SECRET });
     const res = makeRes();
 
     await wrapped(req, res);
 
-    expect(handler).toHaveBeenCalledOnce();
-    expect(res.json).not.toHaveBeenCalled();
+    expect(res.json).toHaveBeenCalledWith({ status: 'ignited' });
+    expect(handler).not.toHaveBeenCalled();
   });
 
-  it('rejects warm signal with wrong secret — calls handler', async () => {
+  it('calls handler on real request', async () => {
+    const handler = vi.fn();
+    const wrapped = igniteMiddleware(handler, SECRET);
+
+    await wrapped(makeReq({ 'x-ignite-key': SECRET }), makeRes());
+
+    expect(handler).toHaveBeenCalledOnce();
+  });
+
+  it('calls handler when secret is wrong', async () => {
     const handler = vi.fn();
     const wrapped = igniteMiddleware(handler, SECRET);
 

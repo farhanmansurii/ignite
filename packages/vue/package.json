@@ -6,6 +6,8 @@
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
   "types": "./dist/index.d.ts",
+  "files": ["dist", "LICENSE"],
+  "sideEffects": false,
   "exports": {
     ".": {
       "import": {
@@ -29,7 +31,7 @@
   },
   "scripts": {
     "build": "tsup src/index.ts --format cjs,esm --dts",
-    "test": "vitest run --passWithNoTests"
+    "test": "vitest run"
   },
   "peerDependencies": {
     "vue": ">=3"
