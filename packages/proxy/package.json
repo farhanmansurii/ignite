@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "build": "cargo install -q worker-build && worker-build --release",
-    "deploy": "wrangler deploy"
+    "deploy": "wrangler deploy",
+    "test": "cargo test"
   }
 }

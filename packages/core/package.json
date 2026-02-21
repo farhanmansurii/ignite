@@ -1,12 +1,15 @@
 {
   "name": "@farhanmansuri/ignite-core",
-  "version": "1.0.4",
-  "description": "Serverless cold-start elimination — framework-agnostic signal logic",
+  "version": "1.0.5",
+  "description": "Serverless cold-start elimination \u2014 framework-agnostic signal logic",
   "license": "MIT",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
   "types": "./dist/index.d.ts",
-  "files": ["dist", "LICENSE"],
+  "files": [
+    "dist",
+    "LICENSE"
+  ],
   "sideEffects": false,
   "exports": {
     ".": {

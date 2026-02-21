@@ -154,10 +154,121 @@ Firebase Function  →  __ignite: true  →  early exit, container warm
 
 ---
 
+## Troubleshooting
+
+### Warm signals are firing but cold starts still happen
+
+**Most likely cause:** The Firebase function container spun down between the warm signal and the click.
+
+- Check that your `hoverTimeout` (default 150ms) is appropriate — increase it if users tend to click slowly after hovering
+- Confirm the warm signal is reaching Firebase: add `onWarm: (fn, ms) => console.log(...)` and check the browser console
+- Firebase containers can spin down in as little as a few minutes of inactivity — Ignite only prevents cold starts when the user hovers shortly before clicking
+
+---
+
+### The proxy returns `401 Unauthorized`
+
+The `X-Ignite-Key` header doesn't match `IGNITE_SECRET` on the proxy.
+
+1. Verify the secret is set on the proxy: `wrangler secret list`
+2. Verify the secret matches what you pass as `apiKey` in the frontend options
+3. If you recently rotated the secret, redeploy the proxy: `wrangler deploy`
+
+---
+
+### The proxy returns `403 Forbidden`
+
+The function name is not in `ALLOWED_FUNCTIONS`.
+
+1. Check the exact value: `wrangler secret list` (won't show the value, but confirms it exists)
+2. The allowlist is **exact-match and case-sensitive** — `CreateProject` ≠ `createProject`
+3. Update the allowlist: `wrangler secret put ALLOWED_FUNCTIONS` then redeploy
+
+---
+
+### The proxy returns `429 Too Many Requests`
+
+Rate limit hit — 30 warm signals per IP per 60 seconds.
+
+- This is normal if you're testing rapidly from the same machine
+- In production this should never trigger for real users — each user hovers once before clicking
+- If you need a higher limit, change `RATE_LIMIT_MAX` in `packages/proxy/src/lib.rs` and redeploy
+
+---
+
+### `sendBeacon` fires but nothing reaches Firebase
+
+The proxy deployed successfully but the background `ctx.wait_until` call to Firebase is failing silently.
+
+1. Check `FIREBASE_BASE_URL` is set and correct: `wrangler secret list`
+2. The URL should be the base path — **no trailing slash**, e.g. `https://us-central1-myapp.cloudfunctions.net`
+3. Confirm the function name matches exactly: `createProject` not `createProject-v2`
+4. Check Firebase Function logs in the Google Cloud console for errors
+
+---
+
+### Firebase function is being called but `onWarm` is never triggered
+
+`sendBeacon` doesn't return a response body — `onWarm` latency is measured from queue time, not execution. This is expected.
+
+If using the `fetch` fallback (sendBeacon unavailable), `onWarm` fires after the fetch resolves.
+
+---
+
+### `onError` fires with `AbortError`
+
+The fetch fallback timed out (default 5 seconds). The proxy may be slow or unreachable.
+
+1. Check your Cloudflare Worker is deployed and healthy in the Cloudflare dashboard
+2. Try increasing the timeout by modifying `FETCH_TIMEOUT_MS` in `packages/core/src/index.ts` if your proxy is in a distant region
+
+---
+
+### Warm signals work in dev but not in production
+
+**CORS:** Make sure the proxy `wrangler.toml` is deployed — the `Access-Control-Allow-Origin: *` header is set by the Worker, not by Firebase.
+
+**CSP:** If your app uses a `Content-Security-Policy`, add your proxy URL to `connect-src`:
+```
+Content-Security-Policy: connect-src 'self' https://your-proxy.workers.dev;
+```
+
+---
+
+### How to rotate `IGNITE_SECRET`
+
+1. Generate a new secret: `openssl rand -hex 32`
+2. Update the proxy: `wrangler secret put IGNITE_SECRET` → enter new value → `wrangler deploy`
+3. Update Firebase env: re-deploy your Firebase functions with the new secret value
+4. Update your frontend `apiKey` option and redeploy your app
+5. The old secret stops working immediately after step 2
+
+---
+
+### Debugging locally
+
+```bash
+# Run the proxy locally (requires wrangler + Rust toolchain)
+cd packages/proxy
+wrangler dev
+
+# Test it directly
+curl -X POST "http://localhost:8787/warm?fn=createProject" \
+  -H "X-Ignite-Key: your-secret" \
+  -H "Content-Type: application/json" \
+  -d '{"__ignite": true}'
+# Expected: "Ignited"
+```
+
+---
+
 ## Development
 
 ```bash
 pnpm install
 pnpm build        # builds all JS packages
-pnpm test         # runs all test suites (22 tests)
+pnpm test         # runs all test suites (46 tests)
+
+# Proxy tests (requires Rust)
+cd packages/proxy && cargo test
 ```
