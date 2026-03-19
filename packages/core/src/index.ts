@@ -1,7 +1,8 @@
-export interface IgniteOptions {
-  proxyUrl: string;
+export interface IgniteConfig {
+  serverBaseURL: string;
   apiKey?: string;
   hoverTimeout?: number;
+  buildURL?: (serverBaseURL: string, functionName: string) => string;
   onWarm?: (fnName: string, latency: number) => void;
   onError?: (err: any) => void;
 }
@@ -25,16 +26,22 @@ export const isWarmed = (functionName: string): boolean => {
   return true;
 };
 
+/** Build the default warm URL: {serverBaseURL}/{encodedFunctionName} with trailing slash stripping. */
+const defaultBuildURL = (serverBaseURL: string, functionName: string): string => {
+  const base = serverBaseURL.replace(/\/+$/, '');
+  return `${base}/${encodeURIComponent(functionName)}`;
+};
+
 /**
  * Core signal logic. Framework agnostic.
  */
 export const sendIgniteSignal = async (
   functionName: string,
-  options: IgniteOptions
+  options: IgniteConfig
 ): Promise<void> => {
-  if (!options.proxyUrl) {
-    console.warn('[Ignite] proxyUrl is required');
-    options.onError?.(new Error('proxyUrl is required'));
+  if (!options.serverBaseURL) {
+    console.warn('[Ignite] serverBaseURL is required');
+    options.onError?.(new Error('serverBaseURL is required'));
     return;
   }
   if (!functionName) {
@@ -46,13 +53,14 @@ export const sendIgniteSignal = async (
   if (isWarmed(functionName)) return;
 
   const start = Date.now();
-  // URL-encode functionName to prevent injection via query string
-  const url = `${options.proxyUrl}/warm?fn=${encodeURIComponent(functionName)}`;
+  const buildFn = options.buildURL ?? defaultBuildURL;
+  const url = buildFn(options.serverBaseURL, functionName);
   const body = JSON.stringify({ __ignite: true });
 
   try {
     // sendBeacon: non-blocking, survives page unload — preferred path
-    if (typeof navigator !== 'undefined' && navigator.sendBeacon) {
+    // Skip sendBeacon when apiKey is set (sendBeacon cannot send custom headers)
+    if (!options.apiKey && typeof navigator !== 'undefined' && navigator.sendBeacon) {
       const blob = new Blob([body], { type: 'application/json' });
       const success = navigator.sendBeacon(url, blob);
       if (success) {
@@ -95,7 +103,21 @@ export const sendIgniteSignal = async (
  */
 export const sendIgniteSignals = (
   fnNames: string[],
-  options: IgniteOptions
+  options: IgniteConfig
 ): Promise<void[]> => {
   return Promise.all(fnNames.map((fn) => sendIgniteSignal(fn, options)));
+};
+
+/**
+ * Factory that returns a configured ignite instance.
+ */
+export const configureIgnite = (config: IgniteConfig) => {
+  if (!config.serverBaseURL) {
+    throw new Error('[Ignite] configureIgnite requires serverBaseURL');
+  }
+  return {
+    warm: (functionName: string) => sendIgniteSignal(functionName, config),
+    warmMany: (fnNames: string[]) => sendIgniteSignals(fnNames, config),
+    isWarmed,
+  };
 };

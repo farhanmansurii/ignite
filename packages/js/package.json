@@ -1,15 +1,12 @@
 {
-  "name": "@farhanmansuri/ignite-svelte",
+  "name": "@farhanmansuri/ignite-js",
   "version": "2.0.0",
-  "description": "Svelte action for Ignite \u2014 pre-warms serverless functions on hover intent",
+  "description": "Vanilla JS client for serverless cold-start warming — framework-agnostic",
   "license": "MIT",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
   "types": "./dist/index.d.ts",
-  "files": [
-    "dist",
-    "LICENSE"
-  ],
+  "files": ["dist", "LICENSE"],
   "sideEffects": false,
   "exports": {
     ".": {
@@ -26,9 +23,9 @@
   "repository": {
     "type": "git",
     "url": "https://github.com/farhanmansurii/ignite.git",
-    "directory": "packages/svelte"
+    "directory": "packages/js"
   },
-  "homepage": "https://github.com/farhanmansurii/ignite/tree/master/packages/svelte#readme",
+  "homepage": "https://github.com/farhanmansurii/ignite/tree/master/packages/js#readme",
   "bugs": {
     "url": "https://github.com/farhanmansurii/ignite/issues"
   },
@@ -36,25 +33,11 @@
     "build": "tsup src/index.ts --format cjs,esm --dts",
     "test": "vitest run"
   },
-  "peerDependencies": {
-    "svelte": ">=3"
-  },
+  "keywords": ["serverless", "cold-start", "pre-warming", "performance", "vanilla-js"],
   "dependencies": {
     "@farhanmansuri/ignite-core": "workspace:*"
   },
-  "keywords": [
-    "svelte",
-    "svelte-action",
-    "serverless",
-    "cold-start",
-    "pre-warming",
-    "performance",
-    "hover-intent",
-    "optimization"
-  ],
   "devDependencies": {
-    "happy-dom": "^14.0.0",
-    "svelte": "^4.0.0",
     "tsup": "^8.0.0",
     "typescript": "^5.0.0",
     "vitest": "^1.0.0"

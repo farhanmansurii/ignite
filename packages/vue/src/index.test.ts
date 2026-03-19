@@ -2,7 +2,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { defineComponent, h } from 'vue';
 import { mount } from '@vue/test-utils';
-import { useIgnite } from './index';
+import { useIgnite, createIgnitePlugin } from './index';
 
 vi.mock('@farhanmansuri/ignite-core', () => ({
   sendIgniteSignal: vi.fn().mockResolvedValue(undefined),
@@ -11,9 +11,9 @@ vi.mock('@farhanmansuri/ignite-core', () => ({
 
 import { sendIgniteSignal, clearWarmCache } from '@farhanmansuri/ignite-core';
 
-const defaultOptions = { proxyUrl: 'https://example.com' };
+const defaultOptions = { serverBaseURL: 'https://example.com' };
 
-const makeComponent = (fn = 'myFn', opts = defaultOptions) =>
+const makeComponent = (fn = 'myFn', opts?: Parameters<typeof useIgnite>[1]) =>
   defineComponent({
     setup() {
       return useIgnite(fn, opts);
@@ -34,7 +34,7 @@ afterEach(() => {
 
 describe('useIgnite (Vue)', () => {
   it('returns all 4 event handlers', () => {
-    const wrapper = mount(makeComponent());
+    const wrapper = mount(makeComponent('myFn', defaultOptions));
     const { onMouseEnter, onMouseLeave, onFocus, onTouchStart } = wrapper.vm as any;
     expect(typeof onMouseEnter).toBe('function');
     expect(typeof onMouseLeave).toBe('function');
@@ -44,44 +44,70 @@ describe('useIgnite (Vue)', () => {
 
   it('onMouseEnter sets a timeout', () => {
     const setTimeoutSpy = vi.spyOn(globalThis, 'setTimeout');
-    const wrapper = mount(makeComponent());
+    const wrapper = mount(makeComponent('myFn', defaultOptions));
     (wrapper.vm as any).onMouseEnter();
     expect(setTimeoutSpy).toHaveBeenCalledWith(expect.any(Function), 150);
   });
 
   it('onMouseLeave clears the timeout', () => {
     const clearTimeoutSpy = vi.spyOn(globalThis, 'clearTimeout');
-    const wrapper = mount(makeComponent());
+    const wrapper = mount(makeComponent('myFn', defaultOptions));
     (wrapper.vm as any).onMouseEnter();
     (wrapper.vm as any).onMouseLeave();
     expect(clearTimeoutSpy).toHaveBeenCalled();
   });
 
   it('fires sendIgniteSignal after hover timeout', async () => {
-    const wrapper = mount(makeComponent());
+    const wrapper = mount(makeComponent('myFn', defaultOptions));
     (wrapper.vm as any).onMouseEnter();
     vi.advanceTimersByTime(150);
-    expect(sendIgniteSignal).toHaveBeenCalledWith('myFn', expect.objectContaining({ proxyUrl: 'https://example.com' }));
+    expect(sendIgniteSignal).toHaveBeenCalledWith('myFn', expect.objectContaining({ serverBaseURL: 'https://example.com' }));
   });
 
   it('respects custom hoverTimeout', () => {
     const setTimeoutSpy = vi.spyOn(globalThis, 'setTimeout');
-    const wrapper = mount(makeComponent('myFn', { proxyUrl: 'https://example.com', hoverTimeout: 300 }));
+    const wrapper = mount(makeComponent('myFn', { serverBaseURL: 'https://example.com', hoverTimeout: 300 }));
     (wrapper.vm as any).onMouseEnter();
     expect(setTimeoutSpy).toHaveBeenCalledWith(expect.any(Function), 300);
   });
 
   it('clears pending timeout on unmount', () => {
     const clearTimeoutSpy = vi.spyOn(globalThis, 'clearTimeout');
-    const wrapper = mount(makeComponent());
+    const wrapper = mount(makeComponent('myFn', defaultOptions));
     (wrapper.vm as any).onMouseEnter();
     wrapper.unmount();
     expect(clearTimeoutSpy).toHaveBeenCalled();
   });
 
   it('onFocus fires signal immediately', async () => {
-    const wrapper = mount(makeComponent());
+    const wrapper = mount(makeComponent('myFn', defaultOptions));
     (wrapper.vm as any).onFocus();
     expect(sendIgniteSignal).toHaveBeenCalledOnce();
+  });
+
+  it('works when app has plugin installed with no per-call options', () => {
+    const wrapper = mount(makeComponent('myFn'), {
+      global: {
+        plugins: [createIgnitePlugin({ serverBaseURL: 'https://plugin.example.com' })],
+      },
+    });
+    (wrapper.vm as any).onFocus();
+    expect(sendIgniteSignal).toHaveBeenCalledWith('myFn', expect.objectContaining({ serverBaseURL: 'https://plugin.example.com' }));
+  });
+
+  it('per-call options override plugin config', () => {
+    const wrapper = mount(makeComponent('myFn', { serverBaseURL: 'https://override.example.com' }), {
+      global: {
+        plugins: [createIgnitePlugin({ serverBaseURL: 'https://plugin.example.com' })],
+      },
+    });
+    (wrapper.vm as any).onFocus();
+    expect(sendIgniteSignal).toHaveBeenCalledWith('myFn', expect.objectContaining({ serverBaseURL: 'https://override.example.com' }));
+  });
+
+  it('throws error when no plugin and no serverBaseURL', () => {
+    expect(() => {
+      mount(makeComponent('myFn'));
+    }).toThrow('useIgnite requires either the ignite plugin or per-call options with serverBaseURL');
   });
 });

@@ -1,15 +1,21 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { ignite } from './index';
+
+vi.mock('svelte', () => ({
+  setContext: vi.fn(),
+  getContext: vi.fn(() => undefined),
+}));
 
 vi.mock('@farhanmansuri/ignite-core', () => ({
   sendIgniteSignal: vi.fn().mockResolvedValue(undefined),
   clearWarmCache: vi.fn(),
 }));
 
+import { ignite, setIgniteConfig } from './index';
 import { sendIgniteSignal } from '@farhanmansuri/ignite-core';
+import { getContext, setContext } from 'svelte';
 
-const defaultParams = { functionName: 'myFn', proxyUrl: 'https://example.com' };
+const defaultParams = { functionName: 'myFn', serverBaseURL: 'https://example.com' };
 
 const makeNode = () => document.createElement('button');
 
@@ -39,7 +45,7 @@ describe('ignite (Svelte action)', () => {
     node.dispatchEvent(new Event('mouseenter'));
     vi.advanceTimersByTime(150);
 
-    expect(sendIgniteSignal).toHaveBeenCalledWith('myFn', expect.objectContaining({ proxyUrl: 'https://example.com' }));
+    expect(sendIgniteSignal).toHaveBeenCalledWith('myFn', expect.objectContaining({ serverBaseURL: 'https://example.com' }));
   });
 
   it('mouseleave clears the timeout', () => {
@@ -95,10 +101,10 @@ describe('ignite (Svelte action)', () => {
   it('update changes the params used for signal', () => {
     const node = makeNode();
     const action = ignite(node, defaultParams);
-    action.update({ functionName: 'otherFn', proxyUrl: 'https://other.com' });
+    action.update({ functionName: 'otherFn', serverBaseURL: 'https://other.com' });
 
     node.dispatchEvent(new Event('focus'));
-    expect(sendIgniteSignal).toHaveBeenCalledWith('otherFn', expect.objectContaining({ proxyUrl: 'https://other.com' }));
+    expect(sendIgniteSignal).toHaveBeenCalledWith('otherFn', expect.objectContaining({ serverBaseURL: 'https://other.com' }));
   });
 
   it('respects custom hoverTimeout', () => {
@@ -108,5 +114,36 @@ describe('ignite (Svelte action)', () => {
 
     node.dispatchEvent(new Event('mouseenter'));
     expect(setTimeoutSpy).toHaveBeenCalledWith(expect.any(Function), 300);
+  });
+
+  it('throws when no serverBaseURL is provided and no context', () => {
+    const node = makeNode();
+    expect(() => ignite(node, { functionName: 'myFn' })).toThrow(
+      'ignite action requires either setIgniteConfig() in a parent component or per-action serverBaseURL',
+    );
+  });
+
+  it('setIgniteConfig calls setContext with the correct key and config', () => {
+    const config = { serverBaseURL: 'https://ctx.example.com' };
+    setIgniteConfig(config as any);
+    expect(setContext).toHaveBeenCalledWith(expect.any(Symbol), config);
+  });
+
+  it('uses context config as defaults when per-action params omit serverBaseURL', () => {
+    vi.mocked(getContext).mockReturnValueOnce({ serverBaseURL: 'https://ctx.example.com' });
+    const node = makeNode();
+    ignite(node, { functionName: 'ctxFn' });
+
+    node.dispatchEvent(new Event('focus'));
+    expect(sendIgniteSignal).toHaveBeenCalledWith('ctxFn', expect.objectContaining({ serverBaseURL: 'https://ctx.example.com' }));
+  });
+
+  it('per-action params override context config', () => {
+    vi.mocked(getContext).mockReturnValueOnce({ serverBaseURL: 'https://ctx.example.com' });
+    const node = makeNode();
+    ignite(node, { functionName: 'myFn', serverBaseURL: 'https://override.com' });
+
+    node.dispatchEvent(new Event('focus'));
+    expect(sendIgniteSignal).toHaveBeenCalledWith('myFn', expect.objectContaining({ serverBaseURL: 'https://override.com' }));
   });
 });

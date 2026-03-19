@@ -1,6 +1,6 @@
 {
   "name": "@farhanmansuri/ignite-firebase",
-  "version": "1.0.5",
+  "version": "2.0.0",
   "description": "Firebase Functions middleware for Ignite \u2014 early-exit on warm signals",
   "license": "MIT",
   "main": "./dist/index.js",
