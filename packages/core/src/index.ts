@@ -121,3 +121,12 @@ export const configureIgnite = (config: IgniteConfig) => {
     isWarmed,
   };
 };
+
+/**
+ * URL builder for the ignite proxy. Use this as the `buildURL` option
+ * when your serverBaseURL points to an ignite-proxy deployment.
+ */
+export const buildProxyURL = (serverBaseURL: string, functionName: string): string => {
+  const base = serverBaseURL.replace(/\/+$/, '');
+  return `${base}/warm?fn=${encodeURIComponent(functionName)}`;
+};

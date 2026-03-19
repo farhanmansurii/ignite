@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { sendIgniteSignal, sendIgniteSignals, clearWarmCache, isWarmed, configureIgnite } from './index';
+import { sendIgniteSignal, sendIgniteSignals, clearWarmCache, isWarmed, configureIgnite, buildProxyURL } from './index';
 
 const mockSendBeacon = vi.fn(() => true);
 
@@ -235,6 +235,26 @@ describe('configureIgnite', () => {
     expect(mockSendBeacon).toHaveBeenCalledWith(
       'https://example.com/api/warm/myFn',
       expect.any(Blob)
+    );
+  });
+});
+
+describe('buildProxyURL', () => {
+  it('builds proxy-format URL with query param', () => {
+    expect(buildProxyURL('https://proxy.workers.dev', 'createProject')).toBe(
+      'https://proxy.workers.dev/warm?fn=createProject'
+    );
+  });
+
+  it('strips trailing slash', () => {
+    expect(buildProxyURL('https://proxy.workers.dev/', 'myFn')).toBe(
+      'https://proxy.workers.dev/warm?fn=myFn'
+    );
+  });
+
+  it('URL-encodes function name', () => {
+    expect(buildProxyURL('https://proxy.workers.dev', 'my fn/test')).toBe(
+      'https://proxy.workers.dev/warm?fn=my%20fn%2Ftest'
     );
   });
 });
